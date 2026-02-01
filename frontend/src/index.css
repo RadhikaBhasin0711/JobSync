@@ -1,0 +1,17 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Hide scrollbar visually but keep scrolling */
+.scrollbar-hide {
+  -ms-overflow-style: none;          /* IE and Edge */
+  scrollbar-width: none;             /* Firefox */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;                     /* Chrome, Safari, Edge */
+}

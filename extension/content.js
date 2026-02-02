@@ -72,8 +72,7 @@ function extractJobData() {
   }
 
   // ── Company Name ────────────────────────────────────────────────────
-  // ── Company Name ────────────────────────────────────────────────────
-    const companySelectors = [
+  const companySelectors = [
     '.job-details-jobs-unified-top-card__company-name a',                  // Exact match from your screenshot
     '.jobs-unified-top-card__company-name a',                              // Without "job-details-" prefix (fallback)
     'div.job-details-jobs-unified-top-card__company-name a',               // Full container + link
@@ -82,45 +81,45 @@ function extractJobData() {
     'a[data-tracking-control-name*="public_jobs_topcard-org-name"]',      // Variant
     '.jobs-unified-top-card__company-name span',                           // If in span
     '.topcard__org-name-link'                                              // Older fallback
-    ];
+  ];
 
-    let companyEl = null;
-    for (const sel of companySelectors) {
+  let companyEl = null;
+  for (const sel of companySelectors) {
     companyEl = document.querySelector(sel);
     if (companyEl && companyEl.textContent.trim()) {
-        console.log(`[JobSync] Found company with selector: ${sel} → ${companyEl.textContent.trim()}`);
-        break;
+      console.log(`[JobSync] Found company with selector: ${sel} → ${companyEl.textContent.trim()}`);
+      break;
     }
-    }
+  }
 
-    if (companyEl) {
+  if (companyEl) {
     data.company = companyEl.textContent.trim().replace(/\s+/g, ' ');
-    } else {
+  } else {
     console.log("[JobSync] No direct selector matched – fallback to title or aria");
 
     // Fallback 1: aria-label on logo link often has "CompanyName logo"
     const logoLink = document.querySelector('a[aria-label*="logo"]');
     if (logoLink) {
-        const aria = logoLink.getAttribute('aria-label') || '';
-        const companyFromAria = aria.replace(/ logo$/i, '').trim();
-        if (companyFromAria && companyFromAria !== 'logo') {
+      const aria = logoLink.getAttribute('aria-label') || '';
+      const companyFromAria = aria.replace(/ logo$/i, '').trim();
+      if (companyFromAria && companyFromAria !== 'logo') {
         data.company = companyFromAria;
         console.log("[JobSync] Company from aria-label:", data.company);
-        }
+      }
     }
 
     // Fallback 2: Parse document.title (e.g., "FULL STACK DEVELOPER - Wipro | LinkedIn")
     if (data.company === "Unknown Company" && document.title.includes(" - ")) {
-        const parts = document.title.split(" - ");
-        if (parts.length >= 2) {
+      const parts = document.title.split(" - ");
+      if (parts.length >= 2) {
         let potential = parts[1].split(" | ")[0]?.trim();
         if (potential && !potential.includes("LinkedIn") && potential.length > 2) {
-            data.company = potential;
-            console.log("[JobSync] Company from document.title:", data.company);
+          data.company = potential;
+          console.log("[JobSync] Company from document.title:", data.company);
         }
-        }
+      }
     }
-    }
+  }
 
   console.log("[JobSync] Extraction complete:", data);
   return data;
@@ -153,16 +152,23 @@ if (isJobPage()) {
   btn.onclick = () => {
     console.log("[JobSync] Save button clicked!");
 
+    // Critical check: is the extension context still valid?
+    if (!chrome?.runtime?.id) {
+      console.error("[JobSync] Extension context invalidated - reload page needed");
+      alert("Extension was updated or reloaded. Please refresh this page (Ctrl+R) and try saving again.");
+      return;
+    }
+
     try {
       const jobData = extractJobData();
 
-      if (!chrome?.storage?.sync) {
-        console.error("[JobSync] chrome.storage.sync not available");
-        alert("Storage permission issue – please reload extension.");
-        return;
-      }
-
       chrome.storage.sync.get({ applications: [] }, (result) => {
+        if (chrome.runtime.lastError) {
+          console.error("[JobSync] Storage get failed:", chrome.runtime.lastError.message);
+          alert("Storage access failed. Refresh page and try again.");
+          return;
+        }
+
         console.log("[JobSync] Current storage:", result);
 
         const apps = result.applications || [];
@@ -175,14 +181,20 @@ if (isJobPage()) {
           return;
         }
 
-        // Ask for status (your differentiator)
+        // Ask for status
         const status = prompt("Set initial status:", "Applied") || "Applied";
         jobData.status = status;
 
-        apps.push(jobData);
-        console.log("[JobSync] Saving new list with", apps.length, "applications");
+        const updatedApps = [...apps, jobData];
+        console.log("[JobSync] Saving new list with", updatedApps.length, "applications");
 
-        chrome.storage.sync.set({ applications: apps }, () => {
+        chrome.storage.sync.set({ applications: updatedApps }, () => {
+          if (chrome.runtime.lastError) {
+            console.error("[JobSync] Storage set failed:", chrome.runtime.lastError.message);
+            alert("Failed to save. Check console.");
+            return;
+          }
+
           console.log("[JobSync] Save successful!");
           alert(`Saved!\n${jobData.role} at ${jobData.company}\nStatus: ${status}`);
         });

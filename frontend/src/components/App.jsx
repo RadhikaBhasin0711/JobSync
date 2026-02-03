@@ -9,42 +9,30 @@ function App() {
   const [newApp, setNewApp] = useState({ company: '', role: '', status: 'Applied', date: '', link: '' });
   const [editingStatusId, setEditingStatusId] = useState(null);
 
-  // Load data from storage
-  const loadApplications = () => {
-    if (chrome?.storage?.sync) {
-      chrome.storage.sync.get({ applications: [] }, (result) => {
-        setApplications(result.applications || []);
-      });
+  // Load from localStorage (for website) or dummy data
+  useEffect(() => {
+    const saved = localStorage.getItem('applications');
+    if (saved) {
+      setApplications(JSON.parse(saved));
     } else {
-      // Dev fallback
-      setApplications([
+      // Initial dummy data
+      const dummies = [
         { id: 1, company: "Wipro", role: "Full Stack Developer", status: "Applied", date: "1 Feb 2026", link: "#" },
         { id: 2, company: "Valzo Soft Solutions", role: "Software Engineer", status: "Interview", date: "31 Jan 2026", link: "#" },
         { id: 3, company: "Amazon", role: "SDE Intern", status: "Rejected", date: "28 Jan 2026", link: "#" },
         { id: 4, company: "Google", role: "Frontend Engineer", status: "Offer", date: "3 Feb 2026", link: "#" },
-      ]);
-    }
-  };
-
-  // Load on mount + listen for changes from content script
-  useEffect(() => {
-    loadApplications();
-
-    // Listen for storage changes (e.g. from content script)
-    if (chrome?.storage?.onChanged) {
-      const handleStorageChange = (changes, area) => {
-        if (area === 'sync' && changes.applications) {
-          loadApplications();  // Reload when applications change
-        }
-      };
-      chrome.storage.onChanged.addListener(handleStorageChange);
-
-      // Cleanup listener on unmount
-      return () => {
-        chrome.storage.onChanged.removeListener(handleStorageChange);
-      };
+      ];
+      setApplications(dummies);
+      localStorage.setItem('applications', JSON.stringify(dummies));
     }
   }, []);
+
+  // Save to localStorage whenever applications change
+  useEffect(() => {
+    if (applications.length > 0) {
+      localStorage.setItem('applications', JSON.stringify(applications));
+    }
+  }, [applications]);
 
   const stats = {
     total: applications.length,
@@ -62,9 +50,6 @@ function App() {
     if (confirm("Delete this application?")) {
       const updated = applications.filter(app => app.id !== id);
       setApplications(updated);
-      if (chrome?.storage?.sync) {
-        chrome.storage.sync.set({ applications: updated });
-      }
     }
   };
 
@@ -74,9 +59,6 @@ function App() {
     );
     setApplications(updated);
     setEditingStatusId(null);
-    if (chrome?.storage?.sync) {
-      chrome.storage.sync.set({ applications: updated });
-    }
   };
 
   const handleInputChange = (e) => {
@@ -93,14 +75,9 @@ function App() {
       ...newApp,
     };
 
-    const updated = [...applications, newEntry];
-    setApplications(updated);
+    setApplications(prev => [...prev, newEntry]);
     setNewApp({ company: '', role: '', status: 'Applied', date: '', link: '' });
     setShowModal(false);
-
-    if (chrome?.storage?.sync) {
-      chrome.storage.sync.set({ applications: updated });
-    }
   };
 
   return (
@@ -151,7 +128,6 @@ function App() {
 
       {/* Filter + Table */}
       <div className="max-w-7xl mx-auto px-6 pb-12">
-        {/* Filter Dropdown */}
         <div className="mb-6 flex justify-end relative">
           <select 
             value={filter} 
@@ -167,27 +143,16 @@ function App() {
           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-xs">▼</span>
         </div>
 
-        {/* Table */}
         <div className="bg-gray-900/60 backdrop-blur-lg border border-gray-800 rounded-2xl overflow-hidden shadow-2xl">
           <div className="overflow-x-auto scrollbar-hide">
             <table className="min-w-full divide-y divide-gray-800">
               <thead>
                 <tr className="bg-gray-950/50">
-                  <th className="px-8 py-5 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                    Company
-                  </th>
-                  <th className="px-8 py-5 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                    Role
-                  </th>
-                  <th className="px-8 py-5 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-8 py-5 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                    Date
-                  </th>
-                  <th className="px-8 py-5 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                    Actions
-                  </th>
+                  <th className="px-8 py-5 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Company</th>
+                  <th className="px-8 py-5 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Role</th>
+                  <th className="px-8 py-5 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Status</th>
+                  <th className="px-8 py-5 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Date</th>
+                  <th className="px-8 py-5 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-800">

@@ -1,4 +1,4 @@
-// src/App.jsx
+// src/components/App.jsx
 import '../index.css';
 import { useState, useEffect } from 'react';
 
@@ -9,28 +9,43 @@ function App() {
   const [newApp, setNewApp] = useState({ company: '', role: '', status: 'Applied', date: '', link: '' });
   const [editingStatusId, setEditingStatusId] = useState(null);
 
-  // Load from storage on mount + whenever storage changes
-  useEffect(() => {
-    const loadApps = () => {
+  // Load data from storage
+  const loadApplications = () => {
+    if (chrome?.storage?.sync) {
       chrome.storage.sync.get({ applications: [] }, (result) => {
-        const apps = result.applications || [];
-        // Optional: sort by date descending
-        apps.sort((a, b) => new Date(b.date) - new Date(a.date));
-        setApplications(apps);
+        setApplications(result.applications || []);
       });
-    };
+    } else {
+      // Dev fallback
+      setApplications([
+        { id: 1, company: "Wipro", role: "Full Stack Developer", status: "Applied", date: "1 Feb 2026", link: "#" },
+        { id: 2, company: "Valzo Soft Solutions", role: "Software Engineer", status: "Interview", date: "31 Jan 2026", link: "#" },
+        { id: 3, company: "Amazon", role: "SDE Intern", status: "Rejected", date: "28 Jan 2026", link: "#" },
+        { id: 4, company: "Google", role: "Frontend Engineer", status: "Offer", date: "3 Feb 2026", link: "#" },
+      ]);
+    }
+  };
 
-    loadApps();
+  // Load on mount + listen for changes from content script
+  useEffect(() => {
+    loadApplications();
 
-    // Listen for changes from extension saves
-    chrome.storage.onChanged.addListener((changes, namespace) => {
-      if (namespace === 'sync' && changes.applications) {
-        loadApps();
-      }
-    });
+    // Listen for storage changes (e.g. from content script)
+    if (chrome?.storage?.onChanged) {
+      const handleStorageChange = (changes, area) => {
+        if (area === 'sync' && changes.applications) {
+          loadApplications();  // Reload when applications change
+        }
+      };
+      chrome.storage.onChanged.addListener(handleStorageChange);
+
+      // Cleanup listener on unmount
+      return () => {
+        chrome.storage.onChanged.removeListener(handleStorageChange);
+      };
+    }
   }, []);
 
-  // Stats from real data
   const stats = {
     total: applications.length,
     applied: applications.filter(a => a.status === "Applied").length,
@@ -39,63 +54,53 @@ function App() {
     rejected: applications.filter(a => a.status === "Rejected").length,
   };
 
-  // Filtered apps
   const filteredApps = filter === "All" 
     ? applications 
     : applications.filter(a => a.status === filter);
 
-  // Delete
-  const handleDelete = (link) => {  // Use link as unique identifier (more reliable than id)
+  const handleDelete = (id) => {
     if (confirm("Delete this application?")) {
-      chrome.storage.sync.get({ applications: [] }, (result) => {
-        const updated = (result.applications || []).filter(a => a.link !== link);
-        chrome.storage.sync.set({ applications: updated }, () => {
-          setApplications(updated);
-        });
-      });
+      const updated = applications.filter(app => app.id !== id);
+      setApplications(updated);
+      if (chrome?.storage?.sync) {
+        chrome.storage.sync.set({ applications: updated });
+      }
     }
   };
 
-  // Status change
-  const handleStatusChange = (link, newStatus) => {
-    chrome.storage.sync.get({ applications: [] }, (result) => {
-      const updated = (result.applications || []).map(a =>
-        a.link === link ? { ...a, status: newStatus } : a
-      );
-      chrome.storage.sync.set({ applications: updated }, () => {
-        setApplications(updated);
-      });
-    });
+  const handleStatusChange = (id, newStatus) => {
+    const updated = applications.map(app => 
+      app.id === id ? { ...app, status: newStatus } : app
+    );
+    setApplications(updated);
     setEditingStatusId(null);
+    if (chrome?.storage?.sync) {
+      chrome.storage.sync.set({ applications: updated });
+    }
   };
 
-  // Add new (manual)
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setNewApp(prev => ({ ...prev, [name]: value }));
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!newApp.company || !newApp.role || !newApp.date) return;
 
-    const entry = {
+    const newEntry = {
+      id: Date.now(),
       ...newApp,
-      link: newApp.link || window.location.href,  // optional
-      date: newApp.date,  // keep as string or convert to ISO if needed
-      platform: "Manual",
-      status: newApp.status || "Applied"
     };
 
-    chrome.storage.sync.get({ applications: [] }, (result) => {
-      const exists = (result.applications || []).some(a => a.link === entry.link);
-      if (exists) {
-        alert("This link is already saved!");
-        return;
-      }
+    const updated = [...applications, newEntry];
+    setApplications(updated);
+    setNewApp({ company: '', role: '', status: 'Applied', date: '', link: '' });
+    setShowModal(false);
 
-      const updated = [...(result.applications || []), entry];
-      chrome.storage.sync.set({ applications: updated }, () => {
-        setApplications(updated);
-        setNewApp({ company: '', role: '', status: 'Applied', date: '', link: '' });
-        setShowModal(false);
-      });
-    });
+    if (chrome?.storage?.sync) {
+      chrome.storage.sync.set({ applications: updated });
+    }
   };
 
   return (
@@ -187,7 +192,7 @@ function App() {
               </thead>
               <tbody className="divide-y divide-gray-800">
                 {filteredApps.map((app) => (
-                  <tr key={app.link || app.id} className="hover:bg-gray-800/40 transition-colors duration-200 group">
+                  <tr key={app.id} className="hover:bg-gray-800/40 transition-colors duration-200 group">
                     <td className="px-8 py-6 whitespace-nowrap text-sm font-medium text-white group-hover:text-indigo-300 transition-colors">
                       {app.company}
                     </td>
@@ -200,7 +205,7 @@ function App() {
                           <select
                             autoFocus
                             value={app.status}
-                            onChange={(e) => handleStatusChange(app.link, e.target.value)}
+                            onChange={(e) => handleStatusChange(app.id, e.target.value)}
                             onBlur={() => setEditingStatusId(null)}
                             className="w-full bg-gray-900/95 backdrop-blur-md border border-gray-600 text-gray-200 text-sm rounded-xl px-4 py-2 pr-10 focus:outline-none focus:border-indigo-500/70 shadow-lg appearance-none cursor-pointer"
                           >
@@ -213,7 +218,7 @@ function App() {
                         </div>
                       ) : (
                         <span 
-                          onClick={() => setEditingStatusId(app.link)}
+                          onClick={() => setEditingStatusId(app.id)}
                           className={`inline-flex items-center justify-between gap-2 px-5 py-1.5 text-xs font-semibold rounded-xl border cursor-pointer transition-transform hover:scale-105 w-44 ${
                             app.status === 'Applied' ? 'bg-blue-950/60 text-blue-300 border-blue-800' :
                             app.status === 'Interview' ? 'bg-yellow-950/60 text-yellow-300 border-yellow-800' :
@@ -230,7 +235,12 @@ function App() {
                       {app.date}
                     </td>
                     <td className="px-8 py-6 whitespace-nowrap text-right text-sm">
-                      <a href={app.link} target="_blank" className="text-indigo-400 hover:text-indigo-300 mr-5 transition-colors">
+                      <a 
+                        href={app.link} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-indigo-400 hover:text-indigo-300 mr-5 transition-colors"
+                      >
                         View
                       </a>
                       <button onClick={() => handleDelete(app.id)} className="text-red-400 hover:text-red-300 transition-colors">

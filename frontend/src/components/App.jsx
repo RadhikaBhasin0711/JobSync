@@ -5,8 +5,16 @@ import { useState, useEffect } from 'react';
 function App() {
   const [applications, setApplications] = useState([]);
   const [filter, setFilter] = useState("All");
+  const [searchQuery, setSearchQuery] = useState(""); // New: search state
   const [showModal, setShowModal] = useState(false);
-  const [newApp, setNewApp] = useState({ company: '', role: '', status: 'Applied', date: '', link: '' });
+  const [newApp, setNewApp] = useState({
+    company: '',
+    role: '',
+    status: 'Applied',
+    date: '',
+    link: '',
+    notes: '' // New: notes field
+  });
   const [editingStatusId, setEditingStatusId] = useState(null);
 
   // Load from localStorage (for website) or dummy data
@@ -15,12 +23,11 @@ function App() {
     if (saved) {
       setApplications(JSON.parse(saved));
     } else {
-      // Initial dummy data
       const dummies = [
-        { id: 1, company: "Wipro", role: "Full Stack Developer", status: "Applied", date: "1 Feb 2026", link: "#" },
-        { id: 2, company: "Valzo Soft Solutions", role: "Software Engineer", status: "Interview", date: "31 Jan 2026", link: "#" },
-        { id: 3, company: "Amazon", role: "SDE Intern", status: "Rejected", date: "28 Jan 2026", link: "#" },
-        { id: 4, company: "Google", role: "Frontend Engineer", status: "Offer", date: "3 Feb 2026", link: "#" },
+        { id: 1, company: "Wipro", role: "Full Stack Developer", status: "Applied", date: "1 Feb 2026", link: "#", notes: "" },
+        { id: 2, company: "Valzo Soft Solutions", role: "Software Engineer", status: "Interview", date: "31 Jan 2026", link: "#", notes: "" },
+        { id: 3, company: "Amazon", role: "SDE Intern", status: "Rejected", date: "28 Jan 2026", link: "#", notes: "" },
+        { id: 4, company: "Google", role: "Frontend Engineer", status: "Offer", date: "3 Feb 2026", link: "#", notes: "" },
       ];
       setApplications(dummies);
       localStorage.setItem('applications', JSON.stringify(dummies));
@@ -42,9 +49,13 @@ function App() {
     rejected: applications.filter(a => a.status === "Rejected").length,
   };
 
-  const filteredApps = filter === "All" 
-    ? applications 
-    : applications.filter(a => a.status === filter);
+  // Filter by status + search query
+  const filteredApps = applications
+    .filter(a => filter === "All" || a.status === filter)
+    .filter(a =>
+      a.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      a.role.toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
   const handleDelete = (id) => {
     if (confirm("Delete this application?")) {
@@ -76,7 +87,7 @@ function App() {
     };
 
     setApplications(prev => [...prev, newEntry]);
-    setNewApp({ company: '', role: '', status: 'Applied', date: '', link: '' });
+    setNewApp({ company: '', role: '', status: 'Applied', date: '', link: '', notes: '' });
     setShowModal(false);
   };
 
@@ -126,23 +137,37 @@ function App() {
         </div>
       </div>
 
-      {/* Filter + Table */}
+      {/* Filter + Search + Table */}
       <div className="max-w-7xl mx-auto px-6 pb-12">
-        <div className="mb-6 flex justify-end relative">
-          <select 
-            value={filter} 
-            onChange={(e) => setFilter(e.target.value)}
-            className="bg-gray-800/90 backdrop-blur-md border border-gray-600 text-gray-300 text-sm rounded-xl px-4 py-2.5 pr-10 focus:outline-none focus:border-indigo-500/70 hover:border-indigo-500/50 transition-all shadow-sm w-40 cursor-pointer appearance-none"
-          >
-            <option value="All">All</option>
-            <option value="Applied">Applied</option>
-            <option value="Interview">Interview</option>
-            <option value="Offer">Offer</option>
-            <option value="Rejected">Rejected</option>
-          </select>
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-xs">▼</span>
+        {/* Search + Status Filter */}
+        <div className="mb-6 flex flex-col sm:flex-row justify-between items-center gap-4">
+          {/* Search bar */}
+          <input
+            type="text"
+            placeholder="Search by company or role..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full sm:w-64 bg-gray-800/90 backdrop-blur-md border border-gray-600 text-gray-300 text-sm rounded-xl px-4 py-2.5 focus:outline-none focus:border-indigo-500/70 hover:border-indigo-500/50 transition-all shadow-sm"
+          />
+
+          {/* Status Filter */}
+          <div className="relative w-full sm:w-40">
+            <select 
+              value={filter} 
+              onChange={(e) => setFilter(e.target.value)}
+              className="w-full bg-gray-800/90 backdrop-blur-md border border-gray-600 text-gray-300 text-sm rounded-xl px-4 py-2.5 pr-10 focus:outline-none focus:border-indigo-500/70 hover:border-indigo-500/50 transition-all shadow-sm cursor-pointer appearance-none"
+            >
+              <option value="All">All Statuses</option>
+              <option value="Applied">Applied</option>
+              <option value="Interview">Interview</option>
+              <option value="Offer">Offer</option>
+              <option value="Rejected">Rejected</option>
+            </select>
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-xs">▼</span>
+          </div>
         </div>
 
+        {/* Table */}
         <div className="bg-gray-900/60 backdrop-blur-lg border border-gray-800 rounded-2xl overflow-hidden shadow-2xl">
           <div className="overflow-x-auto scrollbar-hide">
             <table className="min-w-full divide-y divide-gray-800">
@@ -152,6 +177,7 @@ function App() {
                   <th className="px-8 py-5 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Role</th>
                   <th className="px-8 py-5 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Status</th>
                   <th className="px-8 py-5 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Date</th>
+                  <th className="px-8 py-5 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Notes</th> {/* New column */}
                   <th className="px-8 py-5 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
@@ -199,6 +225,9 @@ function App() {
                     <td className="px-8 py-6 whitespace-nowrap text-sm text-gray-400">
                       {app.date}
                     </td>
+                    <td className="px-8 py-6 whitespace-nowrap text-sm text-gray-300 max-w-xs truncate" title={app.notes || 'No notes'}>
+                      {app.notes || '-'}
+                    </td>
                     <td className="px-8 py-6 whitespace-nowrap text-right text-sm">
                       <a 
                         href={app.link} 
@@ -220,7 +249,7 @@ function App() {
 
           {filteredApps.length === 0 && (
             <div className="py-16 text-center text-gray-400">
-              No applications match the filter.
+              No applications match the filter or search.
             </div>
           )}
         </div>
@@ -254,9 +283,19 @@ function App() {
                 <label className="block text-sm text-gray-400 mb-2">Date</label>
                 <input type="text" name="date" value={newApp.date} onChange={handleInputChange} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-indigo-500" required />
               </div>
-              <div className="mb-6">
+              <div className="mb-4">
                 <label className="block text-sm text-gray-400 mb-2">Link (optional)</label>
                 <input type="text" name="link" value={newApp.link} onChange={handleInputChange} className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-indigo-500" />
+              </div>
+              <div className="mb-6">
+                <label className="block text-sm text-gray-400 mb-2">Notes (optional)</label>
+                <textarea 
+                  name="notes" 
+                  value={newApp.notes} 
+                  onChange={handleInputChange} 
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-indigo-500 h-24 resize-none"
+                  placeholder="Add any notes, thoughts, or follow-up tasks..."
+                />
               </div>
               <div className="flex justify-end gap-4">
                 <button type="button" onClick={() => setShowModal(false)} className="px-5 py-2 bg-gray-800 text-gray-300 rounded-lg hover:bg-gray-700 transition">
